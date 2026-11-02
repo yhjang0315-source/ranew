@@ -378,7 +378,7 @@ function renderFeed(){
   const f=$("filter");f.replaceChildren();
   const present=CATS.filter(c=>state.items.some(i=>i.cats.includes(c)));
   for(const c of [null,...present]){const b=el("button",{class:"chip",type:"button","aria-pressed":String(state.filter===c),text:c||"전체"});b.onclick=()=>{state.filter=c;renderFeed();};f.append(b);}
-  $("feedSrc").textContent=state.source==="base"?"기본 데이터 · 11월 2일(월) 오전 웹 보도 요약 · 원문 확인 권장":`실시간 수집 · ${state.fetchedAt} 기준 · ${state.items.length}건`;
+  $("feedSrc").textContent=state.source==="auto"?`자동 수집 · ${state.autoAt} 업데이트${state.autoWin?" · "+state.autoWin:""} · ${state.items.length}건 · 원문 확인 권장`:state.source==="base"?"기본 데이터 · 11월 2일(월) 오전 웹 보도 요약 · 원문 확인 권장":`실시간 수집 · ${state.fetchedAt} 기준 · ${state.items.length}건`;
 }
 
 function profileText(){const p=state.profile;return `진로/희망 직무: ${p.career||"미입력"}\n관심 분야: ${p.interests.join(", ")||"없음"}\n추가 키워드: ${p.extra||"없음"}`;}
@@ -633,7 +633,24 @@ $("extra").addEventListener("input",e=>{state.profile.extra=e.target.value;clear
   $("dateline").textContent=`${w.from} ~ ${w.to} 사이 뉴스를 내 관심사와 진로에 맞춰 골라 요약합니다.`;
   renderProfile();renderFeed();renderRange();
   if(isTouch)showMobile();
+  loadAuto();
 })();
+
+// ---- 자동 수집 피드: 예약 작업이 하루 두 번(06:40, 17:40) 웹검색으로 모아 db에 저장 ----
+async function loadAuto(){
+  const db=window.claude?.use?await window.claude.use("db"):null;
+  if(!db)return;
+  db.doc("feed/latest").onSnapshot(snap=>{
+    if(!snap.exists)return;
+    const d=snap.data()||{};
+    if(state.source==="live")return; // 사용자가 방금 직접 수집한 결과는 덮어쓰지 않음
+    const items=normalizeItems(d.items,"a_");
+    if(!items.length)return;
+    state.items=items;state.source="auto";state.filter=null;state.angles={};
+    state.autoAt=String(d.fetchedAt||"").slice(0,40);state.autoWin=String(d.window||"").slice(0,60);
+    renderFeed();
+  },()=>{});
+}
 </script>
 
 </body></html>
