@@ -97,6 +97,7 @@ a.btn{text-decoration:none;display:inline-block}
 .tl li{display:flex;gap:10px;font-size:14px;min-width:0}
 .tl .d{flex:none;font:500 12px/1.9 var(--f-mono);color:var(--dawn);min-width:4.2em}
 .when{font:600 12px var(--f-mono);color:var(--dawn)}
+.rate{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
 .big{background:var(--night);color:var(--bg);border-radius:4px;padding:1px 7px;font-weight:600}
 @media (prefers-reduced-motion:no-preference){.card{transition:border-color .2s}}
 </style>
@@ -178,7 +179,12 @@ a.btn{text-decoration:none;display:inline-block}
         <button class="btn" id="briefBtn">나만의 1분 브리핑 만들기</button>
       </div>
       <section class="brief" id="briefBox" hidden>
-        <h3>오늘 아침, 당신을 위한 1분 브리핑</h3>
+        <div class="bar"><h3>오늘 아침, 당신을 위한 1분 브리핑</h3>
+          <div class="btns" id="ttsBox" hidden>
+            <button class="btn ghost" type="button" id="ttsBtn" disabled>▶ 듣기</button>
+            <select id="ttsRate" aria-label="읽기 속도" class="rate"><option value="0.9">느리게</option><option value="1" selected>보통</option><option value="1.2">빠르게</option></select>
+          </div>
+        </div>
         <p class="out" id="briefOut"></p>
       </section>
       <p class="sec-title">오늘 꼭 볼 뉴스</p>
@@ -394,12 +400,32 @@ $("briefBtn").onclick=async()=>{
   if(!sample){out.textContent="Claude 연결은 claude.ai 화면에서 열었을 때만 쓸 수 있어요.";return;}
   const ranked=state.items.map(it=>({it,s:score(it).s})).sort((a,b)=>b.s-a.s).slice(0,7);
   const list=ranked.map((x,i)=>`${i+1}. [${x.it.cats.join("/")}] ${x.it.title} — ${x.it.summary.join(" ")}`).join("\n");
-  btn.disabled=true;out.textContent="생각하는 중…";
+  btn.disabled=true;out.textContent="생각하는 중…";ttsStop();$("ttsBtn").disabled=true;
   const prompt=`아래 밤사이 뉴스로 이 사람만을 위한 아침 브리핑을 한국어로 써 주세요. 소리 내어 읽으면 1분 정도(450자 안팎) 분량입니다.\n\n[사람]\n${profileText()}\n\n[뉴스]\n${list}\n\n규칙: 인사 한 줄로 시작, 이 사람에게 가장 중요한 뉴스 3개를 골라 각각 '무슨 일 → 나에게 의미' 순서로 2문장씩, 마지막에 오늘 챙길 것 한 줄. 마크다운 기호 없이 문단으로. 뉴스에 없는 사실은 쓰지 마세요.`;
-  try{await sample(prompt,{onText:({text})=>{out.textContent=text;}});}
+  let ok=false;
+  try{await sample(prompt,{onText:({text})=>{out.textContent=text;}});ok=true;}
   catch(e){out.textContent=e.text||errCopy(e);}
-  finally{btn.disabled=false;}
+  finally{btn.disabled=false;$("ttsBtn").disabled=!ok;}
 };
+
+// ---- 1분 브리핑 음성 읽기 (브라우저 내장 음성) ----
+const tts=window.speechSynthesis;
+function koVoice(){const v=tts.getVoices();return v.find(x=>/^ko/i.test(x.lang))||null;}
+function ttsStop(){if(tts){tts.cancel();$("ttsBtn").textContent="▶ 듣기";}}
+if(tts&&window.SpeechSynthesisUtterance){
+  $("ttsBox").hidden=false;
+  tts.onvoiceschanged=()=>{};
+  $("ttsBtn").onclick=()=>{
+    if(tts.speaking){ttsStop();return;}
+    const text=$("briefOut").textContent.trim();if(!text)return;
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang="ko-KR";const v=koVoice();if(v)u.voice=v;
+    u.rate=parseFloat($("ttsRate").value)||1;
+    u.onend=u.onerror=()=>{$("ttsBtn").textContent="▶ 듣기";};
+    tts.cancel();tts.speak(u);$("ttsBtn").textContent="■ 정지";
+  };
+  window.addEventListener("pagehide",()=>tts.cancel());
+}
 
 function normalizeItems(arr,prefix){
   if(!Array.isArray(arr))return [];
