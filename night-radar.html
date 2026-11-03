@@ -98,6 +98,7 @@ a.btn{text-decoration:none;display:inline-block}
 .tl{list-style:none;margin:0;padding:0 0 0 12px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:4px}
 .tl li{display:flex;gap:10px;font-size:14px;min-width:0}
 .tl .d{flex:none;font:500 12px/1.9 var(--f-mono);color:var(--dawn);min-width:4.2em}
+.when{font:600 12px var(--f-mono);color:var(--dawn)}
 .big{background:var(--night);color:var(--bg);border-radius:4px;padding:1px 7px;font-weight:600}
 @media (prefers-reduced-motion:no-preference){.card{transition:border-color .2s}}
 </style>
@@ -333,9 +334,9 @@ function learnBlock(list){
 function cardFor(it,rank,isTop){
   const {s,reasons}=rank;
   const meta=el("div",{class:"meta"});
+  if(it.time)meta.append(el("span",{class:"when",text:it.time+" 보도"}));
   if(s>=4)meta.append(el("span",{class:"rel h",text:"관련도 높음"}));else if(s>0)meta.append(el("span",{class:"rel m",text:"관련 있음"}));
   it.cats.forEach(c=>meta.append(el("span",{class:"tag",text:c})));
-  if(it.time)meta.append(el("span",{class:"tag",text:it.time}));
   const ul=el("ul");it.summary.forEach(x=>ul.append(el("li",{text:x})));
   const why=el("p",{class:"why"},el("b",{text:"왜 중요할까 "}),document.createTextNode(it.why||""));
   const card=el("article",{class:"card"+(isTop?" top":""),id:"card-"+it.id},meta,el("h4",{text:it.title}),ul,why);
@@ -356,7 +357,7 @@ function renderPulse(){
   const list=$("pulseList");
   list.closest(".pulse").hidden=!majors.length;
   list.replaceChildren(...majors.map(it=>{
-    const b=el("button",{type:"button"},el("span",{class:"pc",text:it.cats[0]}),el("span",{class:"pt",text:it.major}));
+    const b=el("button",{type:"button"},el("span",{class:"pc",text:it.time?it.time.replace(/^\d+\/\d+\s*/,""):it.cats[0]}),el("span",{class:"pt",text:it.major}));
     b.onclick=()=>{
       if(state.filter&&!it.cats.includes(state.filter)){state.filter=null;renderFeed();}
       const c=document.getElementById("card-"+it.id);if(!c)return;
