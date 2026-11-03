@@ -92,8 +92,6 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .btns{display:flex;flex-wrap:wrap;gap:8px}
 a.btn{text-decoration:none;display:inline-block}
-.mobile{display:flex;flex-direction:column;gap:8px;background:var(--dawn-soft);border-radius:8px;padding:10px 12px}
-.steps{margin:0;padding-left:18px;font-size:12.5px}
 .period{font:500 12px var(--f-mono);color:var(--night)}
 .tl{list-style:none;margin:0;padding:0 0 0 12px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:4px}
 .tl li{display:flex;gap:10px;font-size:14px;min-width:0}
@@ -139,14 +137,6 @@ a.btn{text-decoration:none;display:inline-block}
       <h2>새 뉴스 불러오기</h2>
       <button class="btn" id="liveBtn">지금 밤사이 뉴스 수집</button>
       <p class="hint">누르면 구글 뉴스에서 어젯밤 9시 이후 기사를 바로 모아 요약해요(1~2분). 매일 06:40·17:40에는 자동으로 수집돼요.</p>
-      <div class="mobile" id="mobileBox" hidden>
-        <p class="hint"><b>폰·태블릿이라면</b> 구글 뉴스에서 헤드라인을 복사해 오면 Claude가 내 관점으로 분석해 드려요.</p>
-        <ol class="steps"><li>구글 뉴스 열기 → 헤드라인 길게 눌러 복사(여러 개 가능)</li><li>돌아와서 '클립보드 붙여넣기' → '붙여넣은 내용 요약'</li></ol>
-        <div class="btns">
-          <a class="btn ghost" id="gnewsLink" target="_blank" rel="noopener" href="https://news.google.com/?hl=ko&gl=KR&ceid=KR:ko">구글 뉴스 열기 ↗</a>
-          <button class="btn ghost" type="button" id="clipBtn">클립보드 붙여넣기</button>
-        </div>
-      </div>
       <details id="pasteBox">
         <summary>기사 직접 붙여넣기</summary>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
@@ -460,7 +450,7 @@ $("liveBtn").onclick=async()=>{
         // 실패하면 데스크톱 앱 브라우저 수집으로 넘어감
       }
     }
-    if(!mcp){st.textContent="실시간 수집은 Claude 데스크톱 앱에서 열었을 때만 돼요. 아래 방법으로 폰·태블릿에서도 분석할 수 있어요.";showMobile();return;}
+    if(!mcp){st.textContent="실시간 수집은 Claude 데스크톱 앱에서 열었을 때만 돼요. '기사 직접 붙여넣기'를 써 보세요.";return;}
     const qs=[];
     const ints=state.profile.interests.length?state.profile.interests:["경제·금융","사회"];
     ints.slice(0,3).forEach(c=>qs.push(CAT_QUERY[c]||c));
@@ -475,28 +465,13 @@ $("liveBtn").onclick=async()=>{
         const r=await mcp.callTool("host:claude_browser","get_page_text",{max_chars:12000});
         chunks.push(`### 검색어: ${q}\n${blockText(r).slice(0,12000)}`);
       }catch(e){
-        if(e.code==="server_not_connected"||e.code==="not_granted"||e.code==="capability_disabled"){st.textContent="실시간 수집은 Claude 데스크톱 앱에서만 돼요. 아래 방법으로 폰·태블릿에서도 분석할 수 있어요.";showMobile();return;}
+        if(e.code==="server_not_connected"||e.code==="not_granted"||e.code==="capability_disabled"){st.textContent="실시간 수집은 Claude 데스크톱 앱에서만 돼요. '기사 직접 붙여넣기'를 써 보세요.";return;}
         if(e.code==="not_in_manifest"||e.code==="cancelled"){st.textContent="브라우저 사용을 허용하지 않아 수집을 멈췄어요.";return;}
       }
     }
     if(!chunks.length){st.textContent="뉴스 페이지를 읽지 못했어요. 잠시 뒤 다시 시도해 주세요.";return;}
     await runExtract(chunks.join("\n\n"),"구글 뉴스 RSS 검색 결과","구글 뉴스");
   }finally{btn.disabled=false;}
-};
-
-// ---- 모바일·태블릿 지원 ----
-const isTouch=matchMedia("(pointer:coarse)").matches||/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
-function showMobile(){
-  $("mobileBox").hidden=false;$("pasteBox").open=true;$("issueKnowBtn").hidden=false;
-  const q=[...state.profile.interests.slice(0,2).map(c=>CAT_QUERY[c]||c),state.profile.career].filter(Boolean).join(" OR ");
-  $("gnewsLink").href=q?`https://news.google.com/search?q=${encodeURIComponent(q+" when:1d")}&hl=ko&gl=KR&ceid=KR:ko`:"https://news.google.com/?hl=ko&gl=KR&ceid=KR:ko";
-}
-$("clipBtn").onclick=async()=>{
-  try{const t=await navigator.clipboard.readText();
-    if(!t||!t.trim()){$("liveStatus").textContent="클립보드가 비어 있어요. 기사를 먼저 복사해 주세요.";return;}
-    const p=$("paste");p.value=(p.value?p.value+"\n\n":"")+t.trim();$("pasteBox").open=true;
-    $("liveStatus").textContent="붙여넣었어요. 더 붙이거나 '붙여넣은 내용 요약'을 눌러 주세요.";
-  }catch(e){$("pasteBox").open=true;$("paste").focus();$("liveStatus").textContent="자동 붙여넣기가 막혀 있어요. 입력칸을 길게 눌러 '붙여넣기'를 해 주세요.";}
 };
 
 $("pasteBtn").onclick=async()=>{
@@ -598,7 +573,7 @@ async function buildIssues(useKnowledge){
     let raw="";
     if(!useKnowledge){
       const mcp=window.claude?.use?await window.claude.use("mcp"):null;
-      const noHost=()=>{showMobile();st.textContent="뉴스 검색은 PC의 Claude 데스크톱 앱에서만 돼요. 폰·태블릿에서는 'Claude가 아는 내용으로 정리'를 눌러 보세요. 최근 사건은 빠질 수 있어요.";kb.hidden=false;};
+      const noHost=()=>{st.textContent="뉴스 검색은 PC의 Claude 데스크톱 앱에서만 돼요. 폰·태블릿에서는 'Claude가 아는 내용으로 정리'를 눌러 보세요. 최근 사건은 빠질 수 있어요.";kb.hidden=false;};
       if(!mcp){noHost();return;}
       const ints=state.profile.interests.length?state.profile.interests:["경제·금융","사회"];
       const kws=["주요 뉴스",...ints.slice(0,2).map(c=>CAT_QUERY[c]||c)];
@@ -646,7 +621,6 @@ $("extra").addEventListener("input",e=>{state.profile.extra=e.target.value;clear
   const w=windowText();
   $("dateline").textContent=`${w.from} ~ ${w.to} 사이 뉴스를 내 관심사와 진로에 맞춰 골라 요약합니다.`;
   renderProfile();renderFeed();renderRange();
-  if(isTouch)showMobile();
   loadAuto();
 })();
 
