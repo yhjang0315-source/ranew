@@ -79,7 +79,7 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
 .pulse button{all:unset;cursor:pointer;display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px dashed var(--line);width:100%}
 .pulse button:focus-visible{outline:2px solid var(--dawn);outline-offset:2px}
 .pulse button:hover .pt{text-decoration:underline}
-.pc{flex:none;font:500 11.5px var(--f-mono);color:var(--dawn);min-width:4.5em}
+.pc{flex:none;font:500 11.5px var(--f-mono);color:var(--dawn);min-width:7.5em}
 .pt{font-size:14px;min-width:0}
 .card.flash{border-color:var(--dawn)}
 .learn{display:flex;flex-direction:column;gap:6px;background:var(--hi-soft);border-radius:8px;padding:9px 12px}
@@ -357,7 +357,7 @@ function renderPulse(){
   const list=$("pulseList");
   list.closest(".pulse").hidden=!majors.length;
   list.replaceChildren(...majors.map(it=>{
-    const b=el("button",{type:"button"},el("span",{class:"pc",text:it.time?it.time.replace(/^\d+\/\d+\s*/,""):it.cats[0]}),el("span",{class:"pt",text:it.major}));
+    const b=el("button",{type:"button"},el("span",{class:"pc",text:it.time||it.cats[0]}),el("span",{class:"pt",text:it.major}));
     b.onclick=()=>{
       if(state.filter&&!it.cats.includes(state.filter)){state.filter=null;renderFeed();}
       const c=document.getElementById("card-"+it.id);if(!c)return;
