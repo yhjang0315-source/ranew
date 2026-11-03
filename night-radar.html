@@ -138,7 +138,7 @@ a.btn{text-decoration:none;display:inline-block}
       <hr style="border:0;border-top:1px solid var(--line);margin:2px 0">
       <h2>새 뉴스 불러오기</h2>
       <button class="btn" id="liveBtn">지금 밤사이 뉴스 수집</button>
-      <p class="hint">Claude 데스크톱 앱에서 열면 구글 뉴스에서 어젯밤 9시 이후 기사를 모아 Claude가 요약해요.</p>
+      <p class="hint">누르면 구글 뉴스에서 어젯밤 9시 이후 기사를 바로 모아 요약해요(1~2분). 매일 06:40·17:40에는 자동으로 수집돼요.</p>
       <div class="mobile" id="mobileBox" hidden>
         <p class="hint"><b>폰·태블릿이라면</b> 구글 뉴스에서 헤드라인을 복사해 오면 Claude가 내 관점으로 분석해 드려요.</p>
         <ol class="steps"><li>구글 뉴스 열기 → 헤드라인 길게 눌러 복사(여러 개 가능)</li><li>돌아와서 '클립보드 붙여넣기' → '붙여넣은 내용 요약'</li></ol>
@@ -447,6 +447,19 @@ $("liveBtn").onclick=async()=>{
   const btn=$("liveBtn"),st=$("liveStatus");btn.disabled=true;
   try{
     const mcp=window.claude?.use?await window.claude.use("mcp"):null;
+    // 1순위: 클라우드 수집 작업을 지금 실행 (폰·탭·PC 모두, 소유자 계정)
+    if(mcp){
+      try{
+        st.textContent="수집을 요청하는 중…";
+        await mcp.callTool("Claude Code Remote","fire_trigger",{trigger_id:AUTO_TRIGGER});
+        state.waitAuto=state.autoAt||"";
+        st.textContent="수집을 시작했어요. 1~2분 뒤 새 뉴스로 자동으로 바뀌어요. 이 화면을 열어 두세요.";
+        return;
+      }catch(e){
+        if(e.code==="cancelled"||e.code==="not_in_manifest"){st.textContent="수집 실행을 허용하지 않아 멈췄어요.";return;}
+        // 실패하면 데스크톱 앱 브라우저 수집으로 넘어감
+      }
+    }
     if(!mcp){st.textContent="실시간 수집은 Claude 데스크톱 앱에서 열었을 때만 돼요. 아래 방법으로 폰·태블릿에서도 분석할 수 있어요.";showMobile();return;}
     const qs=[];
     const ints=state.profile.interests.length?state.profile.interests:["경제·금융","사회"];
@@ -637,6 +650,7 @@ $("extra").addEventListener("input",e=>{state.profile.extra=e.target.value;clear
   loadAuto();
 })();
 
+const AUTO_TRIGGER="trig_01E3f9o72Sk4PWvF6jmWyvCi";
 // ---- 자동 수집 피드: 예약 작업이 하루 두 번(06:40, 17:40) 웹검색으로 모아 db에 저장 ----
 async function loadAuto(){
   const db=window.claude?.use?await window.claude.use("db"):null;
@@ -644,12 +658,15 @@ async function loadAuto(){
   db.doc("feed/latest").onSnapshot(snap=>{
     if(!snap.exists)return;
     const d=snap.data()||{};
-    if(state.source==="live")return; // 사용자가 방금 직접 수집한 결과는 덮어쓰지 않음
+    const waiting=state.waitAuto!==undefined;
+    if(state.source==="live"&&!waiting)return; // 사용자가 방금 직접 수집한 결과는 덮어쓰지 않음
+    if(waiting&&String(d.fetchedAt||"")===state.waitAuto)return;
     const items=normalizeItems(d.items,"a_");
     if(!items.length)return;
     state.items=items;state.source="auto";state.filter=null;state.angles={};
     state.autoAt=String(d.fetchedAt||"").slice(0,40);state.autoWin=String(d.window||"").slice(0,60);
     renderFeed();
+    if(waiting){delete state.waitAuto;$("liveStatus").textContent=`새 뉴스 ${items.length}건으로 바꿨어요.`;}
   },()=>{});
 }
 </script>
