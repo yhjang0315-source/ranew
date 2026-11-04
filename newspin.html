@@ -98,6 +98,7 @@ a.btn{text-decoration:none;display:inline-block}
 .tl .d{flex:none;font:500 12px/1.9 var(--f-mono);color:var(--dawn);min-width:4.2em}
 .when{font:600 12px var(--f-mono);color:var(--dawn)}
 .rate{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
+.last{margin:0;font:500 13px var(--f-mono);color:var(--night)}
 .big{background:var(--night);color:var(--bg);border-radius:4px;padding:1px 7px;font-weight:600}
 @media (prefers-reduced-motion:no-preference){.card{transition:border-color .2s}}
 </style>
@@ -108,6 +109,7 @@ a.btn{text-decoration:none;display:inline-block}
     <div class="timeaxis"><span>어젯밤 21:00</span><span>자정</span><span>오늘 08:00</span></div>
     <h1>뉴스핀</h1>
     <p class="sub" id="dateline">내 관심사와 진로에 맞춰 밤사이 뉴스를 골라 요약합니다.</p>
+    <p class="last" id="lastFetch" role="status"></p>
   </header>
 
   <section class="pulse" aria-labelledby="pulseTitle">
@@ -375,6 +377,7 @@ function renderFeed(){
   const f=$("filter");f.replaceChildren();
   const present=CATS.filter(c=>state.items.some(i=>i.cats.includes(c)));
   for(const c of [null,...present]){const b=el("button",{class:"chip",type:"button","aria-pressed":String(state.filter===c),text:c||"전체"});b.onclick=()=>{state.filter=c;renderFeed();};f.append(b);}
+  renderLast();
   $("feedSrc").textContent=state.source==="auto"?`자동 수집 · ${state.autoAt} 업데이트${state.autoWin?" · "+state.autoWin:""} · ${state.items.length}건 · 원문 확인 권장`:state.source==="base"?"기본 데이터 · 11월 2일(월) 오전 웹 보도 요약 · 원문 확인 권장":`실시간 수집 · ${state.fetchedAt} 기준 · ${state.items.length}건`;
 }
 
@@ -650,6 +653,20 @@ $("extra").addEventListener("input",e=>{state.profile.extra=e.target.value;clear
   loadAuto();
 })();
 
+function agoText(at){
+  const m=/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})/.exec(at||"");if(!m)return "";
+  const n=kstNow();let t=Date.UTC(n.getUTCFullYear(),+m[1]-1,+m[2],+m[3],+m[4]);
+  if(t>n.getTime()+864e5)t=Date.UTC(n.getUTCFullYear()-1,+m[1]-1,+m[2],+m[3],+m[4]);
+  const min=Math.max(0,Math.round((n.getTime()-t)/6e4));
+  return min<1?"방금 전":min<60?`${min}분 전`:min<1440?`${Math.floor(min/60)}시간 전`:`${Math.floor(min/1440)}일 전`;
+}
+function renderLast(){
+  const box=$("lastFetch");if(!box)return;
+  if(state.source==="auto"&&state.autoAt){const at=state.autoAt.replace(/\s*\(한국시간\)/,"");const ago=agoText(at);box.textContent=`마지막 수집 ${at}${ago?" · "+ago:""} · 다음 자동 수집 06:40 / 17:40`;}
+  else if(state.source==="live"&&state.fetchedAt)box.textContent=`마지막 수집 ${state.fetchedAt}`;
+  else box.textContent="아직 수집된 뉴스가 없어 예시 데이터를 보여주고 있어요.";
+}
+setInterval(renderLast,60000);
 const AUTO_TRIGGER="trig_01E3f9o72Sk4PWvF6jmWyvCi";
 // ---- 자동 수집 피드: 예약 작업이 하루 두 번(06:40, 17:40) 웹검색으로 모아 db에 저장 ----
 async function loadAuto(){
