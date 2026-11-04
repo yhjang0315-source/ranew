@@ -479,6 +479,14 @@ $("liveBtn").onclick=async()=>{
   try{
     const mcp=window.claude?.use?await window.claude.use("mcp"):null;
     // 1순위: 클라우드 수집 작업을 지금 실행 (폰·탭·PC 모두, 소유자 계정)
+    if(mcp&&state.isOwner===false&&state.myId){
+      try{await personalCollect(mcp,st);return;}
+      catch(e){
+        if(e.code==="cancelled"||e.code==="not_in_manifest"){st.textContent="Claude Code 사용을 허용하지 않아 멈췄어요.";return;}
+        if(e.code==="server_not_connected"||e.code==="not_granted"){st.textContent="내 계정으로 수집하려면 Claude Code(유료 요금제)가 필요해요. 대신 공유된 뉴스를 보여드리고 있어요.";return;}
+        st.textContent="내 계정 수집에 실패했어요. 공유된 뉴스를 계속 보여드릴게요.";return;
+      }
+    }
     if(mcp){
       try{
         st.textContent="수집을 요청하는 중…";
@@ -686,7 +694,7 @@ function renderMore(){
 $("moreBtn").onclick=()=>{state.moreOpen=!state.moreOpen;renderMore();};
 function renderLast(){
   const box=$("lastFetch");if(!box)return;
-  if(state.source==="auto"&&state.autoAt){const at=state.autoAt.replace(/\s*\(한국시간\)/,"");const ago=agoText(at);box.textContent=`마지막 수집 ${at}${ago?" · "+ago:""}${state.scanned?` · ${state.nsrc?state.nsrc+"개 언론사 ":""}기사 ${state.scanned}건 중 ${state.items.length}건 선별`:""} · 다음 자동 수집 06:40 / 17:40`;}
+  if(state.source==="auto"&&state.autoAt){const at=state.autoAt.replace(/\s*\(한국시간\)/,"");const ago=agoText(at);box.textContent=`${state.feedMine?"내 맞춤 수집":"마지막 수집"} ${at}${ago?" · "+ago:""}${state.scanned?` · ${state.nsrc?state.nsrc+"개 언론사 ":""}기사 ${state.scanned}건 중 ${state.items.length}건 선별`:""} · 다음 자동 수집 06:40 / 17:40`;}
   else if(state.source==="live"&&state.fetchedAt)box.textContent=`마지막 수집 ${state.fetchedAt}`;
   else box.textContent="아직 수집된 뉴스가 없어 예시 데이터를 보여주고 있어요.";
 }
@@ -696,20 +704,68 @@ const AUTO_TRIGGER="trig_01E3f9o72Sk4PWvF6jmWyvCi";
 async function loadAuto(){
   const db=window.claude?.use?await window.claude.use("db"):null;
   if(!db)return;
-  db.doc("feed/latest").onSnapshot(snap=>{
-    if(!snap.exists)return;
-    const d=snap.data()||{};
+  const user=window.claude?.use?await window.claude.use("user"):null;
+  state.isOwner=user?await user.isOwner().catch(()=>false):false;
+  state.myId=user&&!state.isOwner?await user.id().catch(()=>null):null;
+  state.db=db;
+  const docs={shared:null,mine:null};
+  const apply=()=>{
+    if(state.waitMine&&!docs.mine)return;
+    const d=docs.mine||docs.shared;if(!d)return;
+    if(state.waitMine)state.waitAuto=state.waitMineAt;
     const waiting=state.waitAuto!==undefined;
     if(state.source==="live"&&!waiting)return; // 사용자가 방금 직접 수집한 결과는 덮어쓰지 않음
     if(waiting&&String(d.fetchedAt||"")===state.waitAuto)return;
     const items=normalizeItems(d.items,"a_");
     if(!items.length)return;
-    state.items=items;state.source="auto";state.filter=null;state.angles={};
+    state.items=items;state.source="auto";state.filter=null;state.angles={};state.feedMine=!!docs.mine;
     state.autoAt=String(d.fetchedAt||"").slice(0,40);state.autoWin=String(d.window||"").slice(0,60);state.scanned=Number.isFinite(+d.scanned)&&+d.scanned>0?Math.round(+d.scanned):0;state.nsrc=Number.isFinite(+d.sources)&&+d.sources>0?Math.round(+d.sources):0;
     state.more=(Array.isArray(d.more)?d.more:[]).filter(x=>x&&typeof x.title==="string"&&/^https?:\/\//.test(String(x.url))).slice(0,120).map(x=>({title:String(x.title).slice(0,160),source:String(x.source||"").slice(0,40),url:String(x.url),time:String(x.time||"").slice(0,20),cats:(Array.isArray(x.cats)?x.cats:[]).map(String).filter(c=>CATS.includes(c)).slice(0,2)}));
     renderFeed();
-    if(waiting){delete state.waitAuto;$("liveStatus").textContent=`새 뉴스 ${items.length}건으로 바꿨어요.`;}
-  },()=>{});
+    if(waiting){delete state.waitAuto;state.waitMine=false;$("liveStatus").textContent=`새 뉴스 ${items.length}건으로 바꿨어요.`;}
+  };
+  db.doc("feed/latest").onSnapshot(snap=>{docs.shared=snap.exists?(snap.data()||null):null;apply();},()=>{});
+  if(state.myId){
+    const mine=db.collection("data/users/"+state.myId);
+    mine.doc("feed").onSnapshot(snap=>{docs.mine=snap.exists?(snap.data()||null):null;apply();},()=>{});
+    mine.doc("config").onSnapshot(snap=>{state.myTrigger=snap.exists?String((snap.data()||{}).trigger||""):"";},()=>{});
+  }
+}
+
+// ---- 다른 사용자: 자기 Claude 계정으로 수집 (예약 작업을 그 사람 계정에 만들고 실행) ----
+function personalPrompt(){
+  return `뉴스핀 아티팩트(https://claude.ai/artifact/McZTSfEZiiSSKCWrKMxvkw)의 '내 뉴스 피드'를 갱신하는 작업이다. 코드 수정·커밋·PR은 하지 않는다.
+
+[읽는 사람]
+${profileText()}
+
+1. 시간 범위: 지금이 한국시간 오전이면 "어제 21:00 ~ 지금", 오후면 "오늘 08:00 ~ 지금".
+2. 수집: Python(urllib.request)으로 구글 뉴스 RSS를 받는다: https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko , https://news.google.com/rss/headlines/section/topic/<분야>?hl=ko&gl=KR&ceid=KR:ko (<분야>=NATION, WORLD, BUSINESS, TECHNOLOGY, SCIENCE, HEALTH, SPORTS, ENTERTAINMENT), 그리고 읽는 사람의 관심 분야·진로·키워드로 "https://news.google.com/rss/search?q="+urllib.parse.quote(검색어+" when:1d")+"&hl=ko&gl=KR&ceid=KR:ko". pubDate(GMT)+9시간으로 한국시간 변환, 범위 밖·중복 제거. 네트워크가 막혀 RSS를 못 받으면 WebSearch mode "extended" 6~8회로 대신 모은다.
+3. 범위 안 기사를 훑고, 읽는 사람에게 중요한 기사와 누구나 알아야 할 큰 이슈를 섞어 12~20개 항목을 고른다. 같은 사건은 묶고 대표 1개는 source/url, 다른 언론사는 related(최대 5개). 지어내지 않는다.
+{"title":"","major":"큰 이슈면 25자 한 줄, 아니면 빈 문자열","cats":["${CATS.join(", ")} 중 1~3개"],"summary":["2~3문장"],"why":"이 사람에게 왜 중요한지","learn":["더 공부할 개념 2~3개"],"source":"","url":"","related":[{"source":"","url":""}],"time":"M/D HH:MM"}
+4. 나머지 기사 중 의미 있는 것 최대 60개는 more에 {"title","source","url","time","cats"}로 넣는다(원래 제목 그대로).
+5. ArtifactData 도구(ToolSearch로 로드), url=https://claude.ai/artifact/McZTSfEZiiSSKCWrKMxvkw : action="get", collection="data/users/me", doc_id="feed" 로 version 확인(out_dir 쓰지 말 것) → {"items":[...],"more":[...],"fetchedAt":"M/D HH:MM (한국시간)","window":"...","scanned":<훑은 수>,"sources":<언론사 수>} 를 JSON 파일로 쓰고 action="set", collection="data/users/me", doc_id="feed", if_version=<version>(없으면 생략), file_path=<파일> 로 저장.
+6. 건수만 한 줄로 보고하고 끝낸다.`;
+}
+async function personalCollect(mcp,st){
+  const db=state.db;if(!db||!state.myId){st.textContent="claude.ai에 로그인해서 열어야 내 계정으로 수집할 수 있어요.";return;}
+  const cfg=db.collection("data/users/"+state.myId).doc("config");
+  let trig=state.myTrigger;
+  if(!trig){
+    st.textContent="처음 한 번, 내 계정에 매일 06:40 자동 수집을 만드는 중…";
+    const env=await mcp.callTool("Claude Code Remote","list_environments",{limit:20});
+    const envs=(env&&env.payload&&env.payload.environments)||[];
+    const e=envs.find(x=>x.kind==="anthropic_cloud"&&x.state==="active")||envs[0];
+    if(!e){st.textContent="Claude Code 클라우드 환경이 없어요. claude.ai/code에서 한 번 세션을 시작한 뒤 다시 눌러 주세요.";return;}
+    const r=await mcp.callTool("Claude Code Remote","create_trigger",{name:"뉴스핀 내 뉴스 수집",prompt:personalPrompt(),cron_expression:"CRON_TZ=Asia/Seoul 40 6 * * *",create_new_session_on_fire:true,environment_id:e.environment_id,initiation:"human_request"});
+    trig=r&&r.payload&&r.payload.trigger&&r.payload.trigger.id;
+    if(!trig){st.textContent="자동 수집을 만들지 못했어요. 잠시 뒤 다시 눌러 주세요.";return;}
+    await cfg.set({trigger:String(trig)});state.myTrigger=String(trig);
+  }
+  st.textContent="내 계정으로 수집을 요청하는 중…";
+  await mcp.callTool("Claude Code Remote","fire_trigger",{trigger_id:trig});
+  state.waitMine=true;state.waitMineAt=state.feedMine?(state.autoAt||""):"";state.waitAuto=state.waitMineAt;
+  st.textContent="내 계정으로 수집을 시작했어요. 1~3분 뒤 내 맞춤 뉴스로 바뀌어요. 매일 06:40에도 자동으로 모아요.";
 }
 </script>
 
