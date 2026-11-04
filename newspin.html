@@ -341,7 +341,8 @@ function cardFor(it,rank,isTop){
   if(reasons.length)card.append(el("p",{class:"hint",text:"추천 이유: "+reasons.join(" · ")}));
   if(s>0&&it.learn&&it.learn.length)card.append(learnBlock(it.learn));
   const links=el("div",{class:"links"});
-  (it.src||[]).forEach(([name,url])=>{if(/^https?:\/\//.test(url))links.append(el("a",{href:url,target:"_blank",rel:"noopener",text:"원문 · "+name}));});
+  (it.src||[]).forEach(([name,url],i)=>{if(/^https?:\/\//.test(url))links.append(el("a",{href:url,target:"_blank",rel:"noopener",text:(i?"":"원문 · ")+name}));});
+  if((it.src||[]).length>1)links.prepend(el("span",{class:"tag",text:`보도 ${it.src.length}곳`}));
   const angleOut=el("div",{class:"angle out"});angleOut.hidden=!state.angles[it.id];if(state.angles[it.id])angleOut.textContent=state.angles[it.id];
   const ab=el("button",{class:"btn ghost",type:"button",text:"내 진로 관점으로 풀어보기"});
   ab.onclick=()=>careerAngle(it,ab,angleOut);
@@ -437,7 +438,7 @@ function normalizeItems(arr,prefix){
     cats:(Array.isArray(x.cats)?x.cats:[x.cats]).map(String).filter(c=>CATS.includes(c)).slice(0,3).concat([]).filter((v,i,a)=>a.indexOf(v)===i),
     summary:(Array.isArray(x.summary)?x.summary:[String(x.summary||"")]).map(String).filter(Boolean).slice(0,3),
     why:String(x.why||""),learn:(Array.isArray(x.learn)?x.learn:[]).map(String).filter(Boolean).slice(0,3).map(k=>k.slice(0,30)),major:x.major?String(x.major).slice(0,60):"",time:x.time?String(x.time).slice(0,20):"",
-    src:(x.url&&/^https?:\/\//.test(String(x.url)))?[[String(x.source||"원문").slice(0,40),String(x.url)]]:(x.source?[[String(x.source).slice(0,40),"#"]]:[])
+    src:((x.url&&/^https?:\/\//.test(String(x.url)))?[[String(x.source||"원문").slice(0,40),String(x.url)]]:[]).concat((Array.isArray(x.related)?x.related:[]).filter(r=>r&&/^https?:\/\//.test(String(r.url))).slice(0,5).map(r=>[String(r.source||"다른 보도").slice(0,40),String(r.url)]))
   })).map(x=>x.cats.length?x:{...x,cats:["사회"]});
 }
 
