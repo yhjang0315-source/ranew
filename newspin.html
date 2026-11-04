@@ -686,7 +686,7 @@ function renderMore(){
 $("moreBtn").onclick=()=>{state.moreOpen=!state.moreOpen;renderMore();};
 function renderLast(){
   const box=$("lastFetch");if(!box)return;
-  if(state.source==="auto"&&state.autoAt){const at=state.autoAt.replace(/\s*\(한국시간\)/,"");const ago=agoText(at);box.textContent=`마지막 수집 ${at}${ago?" · "+ago:""}${state.scanned?` · 기사 ${state.scanned}건 중 ${state.items.length}건 선별`:""} · 다음 자동 수집 06:40 / 17:40`;}
+  if(state.source==="auto"&&state.autoAt){const at=state.autoAt.replace(/\s*\(한국시간\)/,"");const ago=agoText(at);box.textContent=`마지막 수집 ${at}${ago?" · "+ago:""}${state.scanned?` · ${state.nsrc?state.nsrc+"개 언론사 ":""}기사 ${state.scanned}건 중 ${state.items.length}건 선별`:""} · 다음 자동 수집 06:40 / 17:40`;}
   else if(state.source==="live"&&state.fetchedAt)box.textContent=`마지막 수집 ${state.fetchedAt}`;
   else box.textContent="아직 수집된 뉴스가 없어 예시 데이터를 보여주고 있어요.";
 }
@@ -705,8 +705,8 @@ async function loadAuto(){
     const items=normalizeItems(d.items,"a_");
     if(!items.length)return;
     state.items=items;state.source="auto";state.filter=null;state.angles={};
-    state.autoAt=String(d.fetchedAt||"").slice(0,40);state.autoWin=String(d.window||"").slice(0,60);state.scanned=Number.isFinite(+d.scanned)&&+d.scanned>0?Math.round(+d.scanned):0;
-    state.more=(Array.isArray(d.more)?d.more:[]).filter(x=>x&&typeof x.title==="string"&&/^https?:\/\//.test(String(x.url))).slice(0,80).map(x=>({title:String(x.title).slice(0,160),source:String(x.source||"").slice(0,40),url:String(x.url),time:String(x.time||"").slice(0,20),cats:(Array.isArray(x.cats)?x.cats:[]).map(String).filter(c=>CATS.includes(c)).slice(0,2)}));
+    state.autoAt=String(d.fetchedAt||"").slice(0,40);state.autoWin=String(d.window||"").slice(0,60);state.scanned=Number.isFinite(+d.scanned)&&+d.scanned>0?Math.round(+d.scanned):0;state.nsrc=Number.isFinite(+d.sources)&&+d.sources>0?Math.round(+d.sources):0;
+    state.more=(Array.isArray(d.more)?d.more:[]).filter(x=>x&&typeof x.title==="string"&&/^https?:\/\//.test(String(x.url))).slice(0,120).map(x=>({title:String(x.title).slice(0,160),source:String(x.source||"").slice(0,40),url:String(x.url),time:String(x.time||"").slice(0,20),cats:(Array.isArray(x.cats)?x.cats:[]).map(String).filter(c=>CATS.includes(c)).slice(0,2)}));
     renderFeed();
     if(waiting){delete state.waitAuto;$("liveStatus").textContent=`새 뉴스 ${items.length}건으로 바꿨어요.`;}
   },()=>{});
