@@ -99,6 +99,13 @@ a.btn{text-decoration:none;display:inline-block}
 .when{font:600 12px var(--f-mono);color:var(--dawn)}
 .rate{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
 .last{margin:0;font:500 13px var(--f-mono);color:var(--night)}
+.more{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.more li{display:flex;gap:10px;align-items:baseline;padding:9px 14px;border-top:1px solid var(--line);min-width:0;font-size:14px}
+.more li:first-child{border-top:0}
+.more .mt{flex:none;font:500 11.5px var(--f-mono);color:var(--dawn);min-width:6.5em}
+.more a{color:var(--ink);text-decoration:none;min-width:0}
+.more a:hover{text-decoration:underline}
+.more .ms{flex:none;font-size:12px;color:var(--muted)}
 .big{background:var(--night);color:var(--bg);border-radius:4px;padding:1px 7px;font-weight:600}
 @media (prefers-reduced-motion:no-preference){.card{transition:border-color .2s}}
 </style>
@@ -194,6 +201,10 @@ a.btn{text-decoration:none;display:inline-block}
       <p class="sec-title">그 밖의 밤사이 뉴스</p>
       <div class="chips" id="filter" role="group" aria-label="분야 필터"></div>
       <div id="restList" class="feed"></div>
+      <div id="moreBox" class="feed" hidden>
+        <button class="btn ghost" type="button" id="moreBtn" aria-expanded="false"></button>
+        <ul class="more" id="moreList" hidden></ul>
+      </div>
       </div>
     </main>
   </div>
@@ -378,7 +389,7 @@ function renderFeed(){
   const f=$("filter");f.replaceChildren();
   const present=CATS.filter(c=>state.items.some(i=>i.cats.includes(c)));
   for(const c of [null,...present]){const b=el("button",{class:"chip",type:"button","aria-pressed":String(state.filter===c),text:c||"전체"});b.onclick=()=>{state.filter=c;renderFeed();};f.append(b);}
-  renderLast();
+  renderLast();renderMore();
   $("feedSrc").textContent=state.source==="auto"?`자동 수집 · ${state.autoAt} 업데이트${state.autoWin?" · "+state.autoWin:""} · ${state.items.length}건 · 원문 확인 권장`:state.source==="base"?"기본 데이터 · 11월 2일(월) 오전 웹 보도 요약 · 원문 확인 권장":`실시간 수집 · ${state.fetchedAt} 기준 · ${state.items.length}건`;
 }
 
@@ -661,6 +672,18 @@ function agoText(at){
   const min=Math.max(0,Math.round((n.getTime()-t)/6e4));
   return min<1?"방금 전":min<60?`${min}분 전`:min<1440?`${Math.floor(min/60)}시간 전`:`${Math.floor(min/1440)}일 전`;
 }
+state.moreOpen=false;
+function renderMore(){
+  const box=$("moreBox"),list=$("moreList"),btn=$("moreBtn");
+  const all=(state.source==="auto"&&state.more)||[];
+  const rows=all.filter(x=>!state.filter||x.cats.includes(state.filter));
+  box.hidden=!all.length;if(!all.length)return;
+  btn.textContent=state.moreOpen?"기사 더 보기 접기":`기사 더 보기 (${rows.length}건)`;
+  btn.setAttribute("aria-expanded",String(state.moreOpen));
+  list.hidden=!state.moreOpen;
+  list.replaceChildren(...(rows.length?rows.map(x=>el("li",{},el("span",{class:"mt",text:x.time||(x.cats[0]||"")}),el("a",{href:x.url,target:"_blank",rel:"noopener",text:x.title}),x.source?el("span",{class:"ms",text:x.source}):null)):[el("li",{},el("span",{class:"ms",text:"이 분야의 추가 기사가 없어요."}))]));
+}
+$("moreBtn").onclick=()=>{state.moreOpen=!state.moreOpen;renderMore();};
 function renderLast(){
   const box=$("lastFetch");if(!box)return;
   if(state.source==="auto"&&state.autoAt){const at=state.autoAt.replace(/\s*\(한국시간\)/,"");const ago=agoText(at);box.textContent=`마지막 수집 ${at}${ago?" · "+ago:""}${state.scanned?` · 기사 ${state.scanned}건 중 ${state.items.length}건 선별`:""} · 다음 자동 수집 06:40 / 17:40`;}
@@ -683,6 +706,7 @@ async function loadAuto(){
     if(!items.length)return;
     state.items=items;state.source="auto";state.filter=null;state.angles={};
     state.autoAt=String(d.fetchedAt||"").slice(0,40);state.autoWin=String(d.window||"").slice(0,60);state.scanned=Number.isFinite(+d.scanned)&&+d.scanned>0?Math.round(+d.scanned):0;
+    state.more=(Array.isArray(d.more)?d.more:[]).filter(x=>x&&typeof x.title==="string"&&/^https?:\/\//.test(String(x.url))).slice(0,80).map(x=>({title:String(x.title).slice(0,160),source:String(x.source||"").slice(0,40),url:String(x.url),time:String(x.time||"").slice(0,20),cats:(Array.isArray(x.cats)?x.cats:[]).map(String).filter(c=>CATS.includes(c)).slice(0,2)}));
     renderFeed();
     if(waiting){delete state.waitAuto;$("liveStatus").textContent=`새 뉴스 ${items.length}건으로 바꿨어요.`;}
   },()=>{});
